@@ -4,108 +4,102 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import NoSuchElementException
+from queue import Queue
+import threading
+import pandas as pd
 
-import time
 
 BASE_URL = "https://www.waitrose.com"
-BASE_CATEGORIES = {
-    "fresh_and_chilled": "/ecom/shop/browse/groceries/fresh_and_chilled",
-    "bakery": "/ecom/shop/browse/groceries/bakery",
-    "beer_wine_and_spirits": "/ecom/shop/browse/groceries/beer_wine_and_spirits",
-    "frozen": "/ecom/shop/browse/groceries/frozen",
-    "summer": "/ecom/shop/browse/groceries/summer",
-    "offers": "/ecom/shop/browse/offers",
-}
+BASE_CATEGORIES = [
+    {
+        "badge": "fresh_and_chilled",
+        "url": "/ecom/shop/browse/groceries/fresh_and_chilled",
+    },
+    {
+        "badge": "bakery",
+        "url": "/ecom/shop/browse/groceries/bakery",
+    },
+    {
+        "badge": "beer_wine_and_spirits",
+        "url": "/ecom/shop/browse/groceries/beer_wine_and_spirits",
+    },
+    {
+        "badge": "frozen",
+        "url": "/ecom/shop/browse/groceries/frozen",
+    },
+    {
+        "badge": "summer",
+        "url": "/ecom/shop/browse/groceries/summer",
+    },
+    {
+        "badge": "offers",
+        "url": "/ecom/shop/browse/offers",
+    }
+]
 
-def crawl(search_term):
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+tasks = Queue()
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
-    url = f'{BASE_URL}/{BASE_CATEGORIES["bakery"]}'
-    driver.get(url)
+checkup_table = {f'{BASE_URL}{category.url}': True for category in BASE_CATEGORIES}
+results = {*BASE_CATEGORIES}
 
+def worker():
+    # reject cookies
+    driver.get(f'{BASE_URL}')
     reject_all_button = driver.find_element(By.XPATH, "//button[@data-webviewid='reject-cookies']")
     reject_all_button.send_keys(Keys.RETURN)
 
-    time.sleep(10)
+    while not tasks.empty():
+        url = tasks.get()
 
-    # assert "Load more" in driver.page_source
+        crawl(url)
+        print(tasks)
 
-    # while (True):
-    #     try:
-    #         load_more_button = driver.find_element(By.XPATH, "//button[@aria-label='Load more']")
-    #         load_more_button.send_keys(Keys.RETURN)
-    #         time.sleep(2)
+        tasks.task_done()
 
-    #     except Exception as e:
-    #         break
-
-    # time.sleep(2)
+def crawl(url):
+    driver.get(f'{url}')
     
-    # results = driver.find_elements(By.XPATH, './/article[@data-testid="product-pod"]')
+    elements = driver.find_elements(By.XPATH, './/ul[@data-testid="category-list-links"]/li')
 
-    # products = []
-    # for results in results:
-    #     try:
-    #         product_badge = product.find_element(By.XPATH, './/span[@data-testid="product-badge"]/span').text
-    #     except NoSuchElementException:
-    #         product_badge = ""
-    #     except Exception as e:
-    #         print(e)
+    categories = []
+    for element in elements:
+        try:
+            url = element.find_element(By.XPATH, './/a').get_attribute("href")
+            badge = element.find_element(By.XPATH, './/a/span').text
 
-    #     try:
-    #         name = product.find_element(By.XPATH, './/h2[@data-testid="product-pod-name"]/span').text
-    #     except NoSuchElementException:
-    #         name = ""
-    #     except Exception as e:
-    #         print(e)
+            # tasks.put(url)
 
-    #     try:
-    #         price = product.find_element(By.XPATH, './/span[@data-test="product-pod-price"]/span').text
-    #     except NoSuchElementException:
-    #         price = ""
-    #     except Exception as e:
-    #         print(e)
+            results.append(
+            {
+                "badge": badge,
+                "url": url,
+            }
+        )
+        except NoSuchElementException:
+            pass
+        except Exception as e:
+            print(e)
 
-    #     try:
-    #         product_rating = product.find_element(By.XPATH, './/a[@aria-label="Product Rating"]/div/span').text
-    #     except NoSuchElementException:
-    #         product_rating = ""
-    #     except Exception as e:
-    #         print(e)
-
-    #     try:
-    #         offer_description = product.find_element(By.XPATH, './/span[@data-testid="offer-description"]/span').text
-    #     except NoSuchElementException:
-    #         offer_description = ""
-    #     except Exception as e:
-    #         print(e)
-
-    #     try:
-    #         was_price_description = product.find_element(By.XPATH, './/em[@data-testid="was-price-description"]').text
-    #     except NoSuchElementException:
-    #         was_price_description = price
-    #     except Exception as e:
-    #         print(e)
-
-    #     products.append(
-    #         {
-    #             "product_badge": product_badge,
-    #             'name': name, 
-    #             'price': price, 
-    #             "product_rating": product_rating,
-    #             'offer_description': offer_description, 
-    #             'was_price_description': was_price_description, 
-    #         }
-    #     )
-
-    driver.quit()
-
-    return products
+    return categories
 
 
 if __name__ == "__main__":
-    products = crawl("coffee")
 
-    for product in products:
-        print(product)
+    for category in BASE_CATEGORIES:
+        tasks.put(f'{BASE_URL}{category["url"]}')
+        break
 
+    threading.Thread(target=worker, daemon=True).start()
+    tasks.join()
+    driver.quit()
+
+    print('All tasks are completed')
+
+    df = pd.DataFrame(results)
+    df.to_csv()
+    
+
+# add url from the imtem to differentiate the same and different
+# improve savings
+# apply dfs 

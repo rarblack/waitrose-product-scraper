@@ -36,7 +36,7 @@ def crawl(search_term):
     results = driver.find_elements(By.XPATH, './/article[@data-testid="product-pod"]')
 
     products = []
-    for results in results:
+    for product in results:
         try:
             product_badge = product.find_element(By.XPATH, './/span[@data-testid="product-badge"]/span').text
         except NoSuchElementException:
