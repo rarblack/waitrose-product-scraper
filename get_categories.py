@@ -7,41 +7,46 @@ from selenium.common.exceptions import NoSuchElementException
 from queue import Queue
 import threading
 import pandas as pd
+from pathlib import Path
+import csv
 
-
+DATABASE = 'database.csv'
 BASE_URL = "https://www.waitrose.com"
 BASE_CATEGORIES = [
     {
-        "badge": "fresh_and_chilled",
         "url": "/ecom/shop/browse/groceries/fresh_and_chilled",
+        "badge": "fresh_and_chilled",
     },
     {
-        "badge": "bakery",
         "url": "/ecom/shop/browse/groceries/bakery",
+        "badge": "bakery",
     },
     {
-        "badge": "beer_wine_and_spirits",
         "url": "/ecom/shop/browse/groceries/beer_wine_and_spirits",
+        "badge": "beer_wine_and_spirits",
     },
     {
-        "badge": "frozen",
         "url": "/ecom/shop/browse/groceries/frozen",
+        "badge": "frozen",
     },
     {
-        "badge": "summer",
         "url": "/ecom/shop/browse/groceries/summer",
+        "badge": "summer",
     },
     {
-        "badge": "offers",
         "url": "/ecom/shop/browse/offers",
+        "badge": "offers",
     }
 ]
+
+df = pd.DataFrame(columns=['url', 'badge'])
 
 tasks = Queue()
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
-checkup_table = {f'{BASE_URL}{category.url}': True for category in BASE_CATEGORIES}
-results = {*BASE_CATEGORIES}
+# url:badge -> string:int
+cache = {f'{BASE_URL}{category['url']}': True for category in BASE_CATEGORIES}
+results = []
 
 def worker():
     # reject cookies
@@ -50,12 +55,22 @@ def worker():
     reject_all_button.send_keys(Keys.RETURN)
 
     while not tasks.empty():
-        url = tasks.get()
+        size = tasks.qsize()
 
-        crawl(url)
-        print(tasks)
+        while size > 0:
+            url = tasks.get()
 
-        tasks.task_done()
+            crawl(url)
+            
+            tasks.task_done()
+
+            size -= 1
+
+        if results:
+            df = pd.DataFrame(results, columns=['url', 'badge'])
+            df.to_csv(DATABASE, mode='a', index=False, header=False)
+            
+            results.clear()
 
 def crawl(url):
     driver.get(f'{url}')
@@ -68,14 +83,17 @@ def crawl(url):
             url = element.find_element(By.XPATH, './/a').get_attribute("href")
             badge = element.find_element(By.XPATH, './/a/span').text
 
-            # tasks.put(url)
+            if not cache.get(url, False):
+                tasks.put(url)
+                cache[url] = True
 
-            results.append(
-            {
-                "badge": badge,
-                "url": url,
-            }
-        )
+                results.append(
+                    {
+                        "url": url,
+                        "badge": badge,
+                    }
+                )
+
         except NoSuchElementException:
             pass
         except Exception as e:
@@ -85,21 +103,27 @@ def crawl(url):
 
 
 if __name__ == "__main__":
+    file = Path('database.csv')
+    if not file.exists():
+        df.to_csv(DATABASE)
+
+    # restore cache
+    reader = csv.reader(open(DATABASE, 'r'))
+    next(reader, None) # skip header
+    
+    for row in reader:
+        key = row[0]
+        if not cache.get(key):
+            cache[key] = True
+
+    print("Cache is loaded")
 
     for category in BASE_CATEGORIES:
-        tasks.put(f'{BASE_URL}{category["url"]}')
-        break
+        url = f'{BASE_URL}{category["url"]}'
+        tasks.put(url)
+
+    print("Tasks are loaded")
 
     threading.Thread(target=worker, daemon=True).start()
     tasks.join()
     driver.quit()
-
-    print('All tasks are completed')
-
-    df = pd.DataFrame(results)
-    df.to_csv()
-    
-
-# add url from the imtem to differentiate the same and different
-# improve savings
-# apply dfs
