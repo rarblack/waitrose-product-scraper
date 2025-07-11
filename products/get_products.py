@@ -7,8 +7,9 @@ from selenium.common.exceptions import NoSuchElementException
 from queue import Queue
 import threading
 import pandas as pd
-from ≈ import Path
+from pathlib import Path
 import time
+import pickle
 
 
 BASE_URL = "https://www.waitrose.com"
@@ -17,7 +18,7 @@ CATEGORIES_PATH = "/Users/rarblack/.dev/organizations/rarblack/waitrose-product-
 CATEGORIES:pd.DataFrame = None
 
 CACHE_PATH = "/Users/rarblack/.dev/organizations/rarblack/waitrose-product-scraper/products/cache.pkl"
-CACHE: pd.DataFrame = None
+CACHE: dict[str, bool] = None
 
 THRESHOLD = 1000
 
@@ -35,6 +36,19 @@ DATABASE: pd.DataFrame = None
 
 TASKS = Queue()
 DRIVER = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+def write_cache(cache: dict = CACHE, path: str = CACHE_PATH):
+    with open(path, 'wb') as file:
+        pickle.dump(cache, file)
+
+def read_cache(path: str = CACHE_PATH) -> dict:
+    with open(path, 'rb') as file:
+        try:
+            cache = pickle.load(file)
+        except:
+            cache = {}
+    
+    return cache
 
 def worker() -> None:
 
@@ -153,10 +167,9 @@ if __name__ == "__main__":
 
     # cache file
     if Path(CACHE_PATH).exist():
-        CACHE = pd.read_pickle(CACHE_PATH)
-
+        CACHE = read_cache(CACHE_PATH)
     else: 
-        CACHE = pd.DataFrame(columns=DATABASE_COLUMNS)
+        CACHE = {}
 
     # create tasks
     for url in CATEGORIES.url:
