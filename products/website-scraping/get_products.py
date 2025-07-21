@@ -22,17 +22,20 @@ CACHE: dict[str, bool] = None
 
 THRESHOLD = 1000
 
-DATABASE_PATH = "/Users/rarblack/.dev/organizations/rarblack/waitrose-product-scraper/products/database.pkl"
+DATABASE_PATH = "/Users/rarblack/.dev/organizations/rarblack/waitrose-product-scraper/products/database.csv"
 DATABASE_COLUMNS = [
     'url',
     'badge',
     'name',
+    'size',
     'price',
     'rating',
     'offer_description',
     'was_price_description', 
 ]
 DATABASE: pd.DataFrame = None
+DATA = []
+datas: pd.DataFrame = None
 
 TASKS = Queue()
 DRIVER = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
@@ -61,21 +64,25 @@ def worker() -> None:
 
         try:
             data: list[dict[str, str]] = crawl(url)
-            DATABASE.append(data, ignore_index=True)
+            DATA.extend(data)
 
             CACHE[url] = True
+
+            if len(DATA) >= THRESHOLD:
+                df = pd.DataFrame(DATA, columns=DATABASE_COLUMNS)
+                df.to_csv(DATABASE_PATH, mode='a', index=False, header=False)
+                DATA.clear()
+
+                write_cache()
+
         except Exception as error:
             CACHE[url] = False
             print(error)
 
             # re-add the url
             TASKS.put(url)
-
+        
         TASKS.task_done()
-
-        if DATABASE.size() >= THRESHOLD:
-            DATABASE.to_pickle(DATABASE_PATH)
-    
 
 def crawl(url: str) -> list[dict[str, str]]:
     DRIVER.get(f'{url}')
@@ -106,6 +113,13 @@ def crawl(url: str) -> list[dict[str, str]]:
             name = product.find_element(By.XPATH, './/h2[@data-testid="product-pod-name"]/span').text
         except NoSuchElementException:
             name = ""
+        except Exception as e:
+            print(e)
+
+        try:
+            size = product.find_element(By.XPATH, './/span[@data-testid="product-size"]').text
+        except NoSuchElementException:
+            size = ""
         except Exception as e:
             print(e)
 
@@ -142,6 +156,7 @@ def crawl(url: str) -> list[dict[str, str]]:
                 "url": url,
                 "badge": badge,
                 'name': name, 
+                'size': size,
                 'price': price, 
                 "rating": rating,
                 'offer_description': offer_description, 
@@ -160,13 +175,13 @@ if __name__ == "__main__":
         raise Exception("CATEGORIES is empty")
     
 
-    if Path(DATABASE_PATH).exist():
-        DATABASE = pd.read_pickle(DATABASE_PATH)
+    if Path(DATABASE_PATH).exists():
+        DATABASE = pd.read_csv(DATABASE_PATH)
     else: 
         DATABASE = pd.DataFrame(columns=DATABASE_COLUMNS)
 
     # cache file
-    if Path(CACHE_PATH).exist():
+    if Path(CACHE_PATH).exists():
         CACHE = read_cache(CACHE_PATH)
     else: 
         CACHE = {}
@@ -176,9 +191,9 @@ if __name__ == "__main__":
         if not CACHE.get(url, False):
             TASKS.put(url)
 
+
     if not TASKS.empty():
         threading.Thread(target=worker, daemon=True).start()
-
         TASKS.join()
 
     DRIVER.quit()
