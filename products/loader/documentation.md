@@ -23,33 +23,28 @@
             "amount": 16,
             "currencyCode": "GBP"
         },
-        <!-- not implemented -->
-        {::comment}
+        <!-- not implemented
         "quantity": {
             "amount": 1,
             "uom": "C62"
         }
-        {:/comment}
-        <!-- not implemented -->
+        -->
     },
     "defaultQuantity": {
         "uom": "C62"
     },
-    <!-- not implemented -->
-    {::comment}
+    <!-- not implemented
     "productImageUrls": {
         "extraLarge": "https://ecom-su-static-prod.wtrecom.com/images/products/4/LN_838804_BP_4.jpg",
         "large": "https://ecom-su-static-prod.wtrecom.com/images/products/11/LN_838804_BP_11.jpg",
         "medium": "https://ecom-su-static-prod.wtrecom.com/images/products/3/LN_838804_BP_3.jpg",
         "small": "https://ecom-su-static-prod.wtrecom.com/images/products/9/LN_838804_BP_9.jpg"
     },
-    {:/comment}
-    <!-- not implemented -->
+    -->
     "productType": "G",
     "promotion": {
         "discount": null,
-        <!-- not implemented -->
-        {::comment}
+        <!-- not implemented
         "groups": [
             {
                 "threshold": 1,
@@ -58,9 +53,8 @@
                     "838804"
                 ]
             }
-        ],
-        {:/comment}
-        <!-- not implemented -->
+        ], 
+        -->
         "hidden": null,
         "myWaitrosePromotion": false,
         "promotionDescription": "Save £2.00",
@@ -72,8 +66,7 @@
         "averageRating": 4.4091,
         "reviewCount": 22
     },
-    <!-- not implemented -->
-    {::comment}
+    <!-- not implemented
     "weights": {
         "uoms": [
             "C62"
@@ -84,8 +77,7 @@
         "servings": null,
         "sizeDescription": null
     },
-    {:/comment}
-    <!-- not implemented -->
+    -->
     "productTags": [
         {
             "name": "Large pack",
