@@ -12,11 +12,47 @@ from urllib3.exceptions import ProtocolError
 import logging
 import datetime
 
-class NoOfferProcessing(Exception):
-    pass
 
-class NoProductListElement(Exception):
-    pass
+class Crawler:
+    def __init__(self, driver, base_path):
+        self.configs = {
+            "paths": {
+                "cache": f"{base_path}/cache.pkl",
+                "queue": f"{base_path}/queue.pkl",
+                ""
+            }
+        }
+
+        self.driver = driver
+        self.cache = load_cache()
+        self.queue = load_queue()
+
+    def load_cache():
+        pass
+
+    def load_queue():
+        pass
+
+    @staticmethod
+    def write_pickle(data: dict, path: str):
+        with open(path, 'wb') as file:
+            pickle.dump(data, file)
+    
+    @staticmethod
+    def read_pickle(path: str) -> dict:
+        data = {}
+        with open(path, 'rb') as file:
+            try:
+                data = pickle.load(file)
+            except:
+                pass
+        
+        return data
+    
+
+class WaitroseCrawler(Crawler):
+    def __init__(self, driver, configs = {}):
+        super().__init__(driver, configs)
 
 
 logger = logging.getLogger(__name__)
@@ -31,11 +67,11 @@ BASE_URL = "https://www.waitrose.com"
 SEARCH_PATH = "ecom/shop/browse"
 
 INITIAL_CATEGORIES: dict[str, str] = {
-    'groceries/summer': 'SUMMER',
-    'groceries/fresh_and_chilled': 'Fresh & Chilled',
-    'groceries/frozen': 'Frozen',
+    # 'groceries/summer': 'SUMMER',
+    # 'groceries/fresh_and_chilled': 'Fresh & Chilled',
+    # 'groceries/frozen': 'Frozen',
     'groceries/beer_wine_and_spirits':'Beer, Wine & Spirits',
-    'groceries/bakery': 'Bakery',
+    # 'groceries/bakery': 'Bakery',
     # 'offers': 'Offers'
 }
 
@@ -53,7 +89,6 @@ TASK_CACHE: list[str] = None
 THRESHOLD = 1
 
 TASK_QUEUE = Queue()
-DRIVER = webdriver.Chrome(seleniumwire_options={'disable_encoding': True})
 
 def write_cache(cache: dict = CACHE, path: str = CACHE_PATH):
     with open(path, 'wb') as file:
@@ -100,7 +135,7 @@ def reject_cookies():
         print(error)
     except Exception as error:
         raise error
-    
+
 def clean_url(url: str) -> str:
     return url.split("?")[0]
 
@@ -123,16 +158,13 @@ def crawl(url: str) -> tuple[str, list[dict]]:
             DRIVER.find_element(By.XPATH, "//div[@id='product-refinements']/div[2]/section[2]/div[1]/button").click()
             DRIVER.find_element(By.XPATH, "//input[@name='A_2_Z']").click()
             time.sleep(1)
-        except Exception:
-            try:
-                DRIVER.find_element(By.XPATH, "//div[@id='product-refinements']/div[2]/section[1]/div[1]/button").click()
-                DRIVER.find_element(By.XPATH, "//input[@name='A_2_Z']").click()
-                time.sleep(1)
-            except NoSuchElementException as error:
-                raise error
+        except NoSuchElementException:
+            DRIVER.find_element(By.XPATH, "//div[@id='product-refinements']/div[2]/section[1]/div[1]/button").click()
+            DRIVER.find_element(By.XPATH, "//input[@name='A_2_Z']").click()
+            time.sleep(1)
 
     def load_data() -> int:
-        cnt: int = 1
+        cnt: int = 0
         while (True):
             try:
                 load_more_button = DRIVER.find_element(By.XPATH, "//button[@aria-label='Load more']").click()
@@ -197,28 +229,12 @@ def crawl(url: str) -> tuple[str, list[dict]]:
 
             except NoSuchElementException:
                 pass # add logger
-            
             except Exception as error:
                 print(error)
 
         return categories
 
-    def validate_product_existence():
-        try:
-            DRIVER.find_element(By.XPATH, "//div[@data-testid='product-list']")
-            time.sleep(1)
-
-        except NoSuchElementException:
-            raise NoProductListElement("Empty page")
-        
-    if "offers" in url:
-        raise NoOfferProcessing("Offers are not being processed.")
-    
-    
-    del DRIVER.requests
     DRIVER.get(url)
-
-    validate_product_existence()
 
     sort_a2z()
 
@@ -226,14 +242,14 @@ def crawl(url: str) -> tuple[str, list[dict]]:
     CACHE[url] = data_bulk_count
     
     category = crawl_category()
+    print(category)
 
     data = crawl_data()
 
     tasks = crawl_tasks()
     for task in tasks:
         if not CACHE.get(task['url'], False):
-            if not "offers" in url:
-                TASK_QUEUE.put(task['url'])
+            TASK_QUEUE.put(task['url'])
 
     return {
         "url": url,
@@ -248,7 +264,6 @@ def worker() -> None:
         url_raw = TASK_QUEUE.get()
 
         url = clean_url(url_raw)
-
         logger.info(f"TASK: {url}")
         print(f"TASK: {url}")
 
@@ -264,16 +279,11 @@ def worker() -> None:
                 results.clear()
 
                 write_cache()
-        
-        except NoOfferProcessing:
-            pass
-
-        except NoProductListElement:
-            CACHE[url] = -1
             
         except Exception as error: # TODO: separate exception to handle errors better
             logger.error(error)
-            TASK_QUEUE.task_done()
+            print(CACHE)
+            print(url)
 
             CACHE[url] = None
             TASK_QUEUE.put(url)
@@ -283,10 +293,6 @@ def worker() -> None:
 
             write_cache(CACHE, CACHE_PATH)
             write_pickle(TASK_CACHE, TASK_CACHE_PATH)
-
-            import sys
-            sys.exit(1) 
-
         
         TASK_QUEUE.task_done()
 
@@ -307,10 +313,12 @@ def load_tasks() -> None:
 def main() -> None:
     today = datetime.date.today()
     logging.basicConfig(filename=f'{BASE_PATH}/products/network-scraping/logs/{today}.log', level=logging.INFO)
+    driver = webdriver.Chrome(seleniumwire_options={'disable_encoding': True})
 
-    global CACHE, TASK_CACHE
-    CACHE = load_cache()
-    TASK_CACHE = load_tasks()
+    crawler = Crawler(driver, configs={
+        "cache_path": "/Users/rarblack/.dev/organizations/rarblack/waitrose-product-scraper/products/cache.pkl",
+        "tasks_path": "/Users/rarblack/.dev/organizations/rarblack/waitrose-product-scraper/products/task_cache.pkl",
+    })
 
     if TASK_CACHE:
         logging.info(f'Starting from cache')
@@ -342,7 +350,7 @@ if __name__ == "__main__":
         DRIVER.quit()
 
     except Exception as error:
-        DRIVER.quit()
+        DRIVER.quit()    
 
     
 
